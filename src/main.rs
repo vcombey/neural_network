@@ -2,26 +2,61 @@ use std::io;
 use std::fs::File;
 use std::io::Read;
 use std::mem;
+use random::Source;
+
+println!("Scalar: {:?}", );
+println!("Vector: {:?}", );
 
 struct Neuron {
     weight: Vec<f64>,
     biai: f64,
-    pub activiation: f64,
     activation_func: fn (f64) -> f64,
+    pub activation: f64,
 }
 
 impl Neuron {
-    fn calc_activation(&mut self, layer: &Layer) {
-        self.activiation = (self.activation_func)(layer.neuron.iter().zip(&self.weight).fold(self.biai, |acc, (n, w)| acc + n.activiation * w));
+    fn new_random(nb_conn: u64, activation_func: fn (f64) -> f64) -> Self {
+        let mut source = random::default().seed([42, 69]);
+        Neuron {
+            weight: source.iter().take(nb_conn).collect(),
+            biai: source.read(),
+            activation: 0.0,
+            activation_func,
+        }
+    }
+    fn calc_activation(&mut self, layer: &Vec<Neuron>) {
+        self.activation = (self.activation_func)(layer.iter().zip(&self.weight).fold(self.biai, |acc, (n, w)| acc + n.activation * w));
     }
 }
 
-struct Layer {
-    pub neuron: Vec<Neuron>
+struct NeuralNetwork {
+    layer: Vec<Vec<Neuron>>,
 }
 
-struct NeuralNetwork {
-    layer: Vec<Layer>,
+impl NeuralNetwork {
+    fn new(layer_size: Vec<u32>) -> Self {
+        NeuralNetwork {
+            layer: layer_size.iter().map(|s| 0..s.map(|_| Neuron::new_random()).collect()).collect()
+        }
+    }
+    /// compute the neural network
+    /// take an image and return un tuple with the number guessed and the 
+    /// probability
+    fn compute(&mut self, img: &Image) -> (u8, f64) {
+        assert_eq!(img.data.len(), self.layer.len());
+
+        // initialise first layer with pixels
+        for (i, px) in img.data.iter().enumerate() {
+            self.layer[0][i].activation = *px as f64 / 256.0;
+        }
+
+        for (i, l) in self.layer.iter_mut().skip(1).enumerate() {
+            for n in &mut l {
+                n.calc_activation(&l[i - 1]);
+            }
+        }
+        let (res, prob) = self.layer.last().iter().enumerate().max_by(|(_, n1), (_, n2)| n1.activation >= n2.activation);
+    }
 }
 
 fn parse_label_file(filename: &str) -> io::Result<Vec<u8>> {
